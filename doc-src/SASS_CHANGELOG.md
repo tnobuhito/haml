@@ -37,11 +37,21 @@ this won't cause any backwards-incompatibilities.
   separating two interpolation sections,
   as in `-foo-#{$a}-#{$b}`.
 
+* Properly parse the `#name: value` Safari hack.
+
 * When converting from Sass 2,
   empty strings as variable values are preserved.
 
 * `#{}` interpolation within strings will now be converted properly
   to `#{}` interpolation within strings.
+
+* Don't double-escape backslashes in strings.
+
+### `@import` in Sass
+
+The Sass `@import` statement now allows non-CSS files to be specified with quotes,
+for similarity with the SCSS syntax. For example, `@import "foo.sass"`
+Will now import the `foo.sass` file, rather than compiling to `@import "foo.sass";`.
 
 ### CSS Parsing
 

@@ -777,6 +777,71 @@ SCSS
     assert_sass_to_scss '$var: 12px $bar baz !default;', '$var ||= 12px $bar "baz"'
   end
 
+  # Hacks
+
+  def test_declaration_hacks
+    assert_renders <<SASS, <<SCSS
+foo
+  _name: val
+  *name: val
+  #name: val
+  .name: val
+  name: val
+SASS
+foo {
+  _name: val;
+  *name: val;
+  #name: val;
+  .name: val;
+  name: val; }
+SCSS
+  end
+
+  def test_old_declaration_hacks
+    assert_renders <<SASS, <<SCSS, :old => true
+foo
+  :_name val
+  :*name val
+  :#name val
+  :.name val
+  :name val
+SASS
+foo {
+  _name: val;
+  *name: val;
+  #name: val;
+  .name: val;
+  name: val; }
+SCSS
+  end
+
+  def test_selector_hacks
+    assert_selector_renders = lambda do |s|
+      assert_renders <<SASS, <<SCSS
+#{s}
+  a: b
+SASS
+#{s} {
+  a: b; }
+SCSS
+    end
+
+    assert_selector_renders['> E']
+    assert_selector_renders['+ E']
+    assert_selector_renders['~ E']
+    assert_selector_renders['>> E']
+
+    assert_selector_renders['E*']
+    assert_selector_renders['E*.foo']
+    assert_selector_renders['E*:hover']
+  end
+
+  def test_disallowed_colon_hack
+    assert_raise(Sass::SyntaxError, '":foo: bar" is not allowed in the Sass syntax') do
+      to_sass("foo {:name: val;}", :syntax => :scss)
+    end
+  end
+
   # Sass 3 Deprecation conversions
 
   def test_simple_quoted_strings_unquoted_with_equals
