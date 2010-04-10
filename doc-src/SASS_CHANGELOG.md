@@ -47,6 +47,12 @@ this won't cause any backwards-incompatibilities.
 
 * Don't double-escape backslashes in strings.
 
+* Perform all conversions to rules within directive blocks
+  when converting CSS.
+
+* Prevent multiline CSS selectors from getting cut off
+  in certain rare cases.
+
 ### `@import` in Sass
 
 The Sass `@import` statement now allows non-CSS files to be specified with quotes,
