@@ -3,7 +3,9 @@
 * Table of contents
 {:toc}
 
-## 3.0.0.beta.2 (Unreleased)
+## 3.0.0.beta.2
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.beta.2).
 
 ### New Sass Functions for Introspection
 
@@ -619,7 +621,9 @@ and the hex representation (shortened to the three-letter version if possible).
   and `tealbang(12)` now renders as `tealbang(12)`
   rather than `teal bang(12)`.
 
-## 2.2.23 (Unreleased)
+## 2.2.23
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.23).
 
 * Don't crash when `rake gems` is run in Rails with Sass installed.
   Thanks to [Florian Frank](http://github.com/flori).
