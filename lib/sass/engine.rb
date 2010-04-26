@@ -9,12 +9,14 @@ require 'sass/tree/directive_node'
 require 'sass/tree/variable_node'
 require 'sass/tree/mixin_def_node'
 require 'sass/tree/mixin_node'
+require 'sass/tree/extend_node'
 require 'sass/tree/if_node'
 require 'sass/tree/while_node'
 require 'sass/tree/for_node'
 require 'sass/tree/debug_node'
 require 'sass/tree/warn_node'
 require 'sass/tree/import_node'
+require 'sass/selector'
 require 'sass/environment'
 require 'sass/script'
 require 'sass/scss'
@@ -79,60 +81,49 @@ module Sass
     end
 
     # The character that begins a CSS property.
-    # @private
     PROPERTY_CHAR  = ?:
 
     # The character that designates that
     # a property should be assigned to a SassScript expression.
-    # @private
     SCRIPT_CHAR     = ?=
 
     # The character that designates the beginning of a comment,
     # either Sass or CSS.
-    # @private
     COMMENT_CHAR = ?/
 
     # The character that follows the general COMMENT_CHAR and designates a Sass comment,
     # which is not output as a CSS comment.
-    # @private
     SASS_COMMENT_CHAR = ?/
 
     # The character that follows the general COMMENT_CHAR and designates a CSS comment,
     # which is embedded in the CSS document.
-    # @private
     CSS_COMMENT_CHAR = ?*
 
     # The character used to denote a compiler directive.
-    # @private
     DIRECTIVE_CHAR = ?@
 
     # Designates a non-parsed rule.
-    # @private
     ESCAPE_CHAR    = ?\\
 
     # Designates block as mixin definition rather than CSS rules to output
-    # @private
     MIXIN_DEFINITION_CHAR = ?=
 
     # Includes named mixin declared using MIXIN_DEFINITION_CHAR
-    # @private
     MIXIN_INCLUDE_CHAR    = ?+
 
     # The regex that matches properties of the form `name: prop`.
-    # @private
     PROPERTY_NEW_MATCHER = /^[^\s:"\[]+\s*[=:](\s|$)/
 
     # The regex that matches and extracts data from
     # properties of the form `name: prop`.
-    # @private
     PROPERTY_NEW = /^([^\s=:"]+)\s*(=|:)(?:\s+|$)(.*)/
 
     # The regex that matches and extracts data from
     # properties of the form `:name prop`.
-    # @private
     PROPERTY_OLD = /^:([^\s=:"]+)\s*(=?)(?:\s+|$)(.*)/
 
     # The default options for Sass::Engine.
+    # @api public
     DEFAULT_OPTIONS = {
       :style => :nested,
       :load_paths => ['.'],
@@ -382,7 +373,10 @@ WARNING
           # if we're using the new property syntax
           Tree::RuleNode.new(parse_interp(line.text))
         else
-          parse_property(line, PROPERTY_OLD)
+          name, eq, value = line.text.scan(PROPERTY_OLD)[0]
+          raise SyntaxError.new("Invalid property: \"#{line.text}\".",
+            :line => @line) if name.nil? || value.nil?
+          parse_property(name, parse_interp(name), eq, value, :old, line)
         end
       when ?!, ?$
         parse_variable(line)
@@ -401,20 +395,29 @@ WARNING
           parse_mixin_include(line, root)
         end
       else
-        if line.text =~ PROPERTY_NEW_MATCHER
-          parse_property(line, PROPERTY_NEW)
-        else
-          Tree::RuleNode.new(parse_interp(line.text))
-        end
+        parse_property_or_rule(line)
       end
     end
 
-    def parse_property(line, property_regx)
-      name, eq, value = line.text.scan(property_regx)[0]
+    def parse_property_or_rule(line)
+      scanner = StringScanner.new(line.text)
+      hack_char = scanner.scan(/[:\*\.]|\#(?!\{)/)
+      parser = Sass::SCSS::SassParser.new(scanner, @line)
 
-      raise SyntaxError.new("Invalid property: \"#{line.text}\".",
-        :line => @line) if name.nil? || value.nil?
+      unless res = parser.parse_interp_ident
+        return Tree::RuleNode.new(parse_interp(line.text))
+      end
+      res.unshift(hack_char) if hack_char
 
+      name = line.text[0...scanner.pos]
+      if scanner.scan(/\s*([:=])(?:\s|$)/)
+        parse_property(name, res, scanner[1], scanner.rest, :new, line)
+      else
+        Tree::RuleNode.new(res + parse_interp(scanner.rest))
+      end
+    end
+
+    def parse_property(name, parsed_name, eq, value, prop, line)
       if value.strip.empty?
         expr = Sass::Script::String.new("")
       else
@@ -427,9 +430,7 @@ WARNING
             @line, line.offset + 1, @options[:filename])
         end
       end
-      Tree::PropNode.new(
-        parse_interp(name), expr,
-        property_regx == PROPERTY_OLD ? :old : :new)
+      Tree::PropNode.new(parse_interp(name), expr, prop)
     end
 
     def parse_variable(line)
@@ -500,6 +501,12 @@ WARNING
           :line => @line + 1) unless line.children.empty?
         offset = line.offset + line.text.index(value).to_i
         Tree::DebugNode.new(parse_script(value, :offset => offset))
+      elsif directive == "extend"
+        raise SyntaxError.new("Invalid extend directive '@extend': expected expression.") unless value
+        raise SyntaxError.new("Illegal nesting: Nothing may be nested beneath extend directives.",
+          :line => @line + 1) unless line.children.empty?
+        offset = line.offset + line.text.index(value).to_i
+        Tree::ExtendNode.new(parse_interp(value, offset))
       elsif directive == "warn"
         raise SyntaxError.new("Invalid warn directive '@warn': expected expression.") unless value
         raise SyntaxError.new("Illegal nesting: Nothing may be nested beneath warn directives.",
@@ -552,7 +559,6 @@ WARNING
       nil
     end
 
-    # @private
     MIXIN_DEF_RE = /^(?:=|@mixin)\s*(#{Sass::SCSS::RX::IDENT})(.*)$/
     def parse_mixin_definition(line)
       name, arg_string = line.text.scan(MIXIN_DEF_RE).first
@@ -565,7 +571,6 @@ WARNING
       Tree::MixinDefNode.new(name, args)
     end
 
-    # @private
     MIXIN_INCLUDE_RE = /^(?:\+|@include)\s*(#{Sass::SCSS::RX::IDENT})(.*)$/
     def parse_mixin_include(line, root)
       name, arg_string = line.text.scan(MIXIN_INCLUDE_RE).first
@@ -605,15 +610,15 @@ WARNING
       end
     end
 
-    def parse_interp(text)
-      self.class.parse_interp(text, @line, :filename => @filename)
+    def parse_interp(text, offset = 0)
+      self.class.parse_interp(text, @line, offset, :filename => @filename)
     end
 
     # It's important that this have strings (at least)
     # at the beginning, the end, and between each Script::Node.
     #
     # @private
-    def self.parse_interp(text, line, options)
+    def self.parse_interp(text, line, offset, options)
       res = []
       rest = Haml::Shared.handle_interpolation text do |scan|
         escapes = scan[2].size
@@ -623,7 +628,7 @@ WARNING
         else
           res << "\\" * [0, escapes - 1].max
           res << Script::Parser.new(
-            scan, line, scan.pos - scan.matched_size, options).
+            scan, line, offset + scan.pos - scan.matched_size, options).
             parse_interpolated
         end
       end

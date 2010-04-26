@@ -3,6 +3,17 @@
 * Table of contents
 {:toc}
 
+## 3.0.0.rc.1
+
+Ruby code can now be wrapped across multiple lines
+as long as each line but the last ends in a comma.
+
+## 3.0.0.beta.3
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.beta.3).
+
+There were no changes made to Haml between beta 2 and beta 3.
+
 ## 3.0.0.beta.2
 
 [Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.beta.2).
@@ -266,6 +277,15 @@ Thanks to [Josh Peek](http://joshpeek.com/).
 
 * The `puts` helper has been removed.
   Use {Haml::Helpers#haml\_concat} instead.
+
+## 2.2.24 (Unreleased)
+
+* Don't prevent ActiveModel form elements from having error formatting applied.
+
+* Make sure `form_for` blocks are properly indented under Rails 3.0.0.beta.3.
+
+* Don't activate a bug in the `dynamic_form` plugin under Rails 3.0.0.beta.3
+  that would cause its methods not to be loaded.
 
 ## 2.2.23
 

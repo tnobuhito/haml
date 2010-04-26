@@ -113,17 +113,17 @@ foo \#{"\#{"ba" + "r"} baz"} bang
   a: b
 SASS
     assert_equal(<<CSS, render(<<SASS))
-foo \#{bar baz} bang {
+foo [bar="\#{bar baz}"] bang {
   a: b; }
 CSS
-foo \\\#{\#{"ba" + "r"} baz} bang
+foo [bar="\\\#{\#{"ba" + "r"} baz}"] bang
   a: b
 SASS
     assert_equal(<<CSS, render(<<SASS))
-foo \#{baz bang {
+foo [bar="\#{baz"] bang {
   a: b; }
 CSS
-foo \#{"\\\#{" + "baz"} bang
+foo [bar="\#{"\\\#{" + "baz"}"] bang
   a: b
 SASS
   end
@@ -141,6 +141,25 @@ SASS
   def test_function_results_have_options
     assert_equal "Options defined!", resolve("assert_options(abs(1))")
     assert_equal "Options defined!", resolve("assert_options(round(1.2))")
+  end
+
+  def test_funcall_requires_no_whitespace_before_lparen
+    assert_equal "no-repeat 15px", resolve("no-repeat (7px + 8px)")
+    assert_equal "no-repeat(15px)", resolve("no-repeat(7px + 8px)")
+  end
+
+  def test_dynamic_url
+    assert_equal "url(foo-bar)", resolve("url($foo)", {}, env('foo' => Sass::Script::String.new("foo-bar")))
+    assert_equal "url(foo-bar baz)", resolve("url($foo $bar)", {}, env('foo' => Sass::Script::String.new("foo-bar"), 'bar' => Sass::Script::String.new("baz")))
+    assert_equal "url(foo baz)", resolve("url(foo $bar)", {}, env('bar' => Sass::Script::String.new("baz")))
+    assert_equal "url(foo bar)", resolve("url(foo    bar)")
+  end
+
+  def test_url_with_interpolation
+    assert_equal "url(http://sass-lang.com/images/foo-bar)", resolve("url(http://sass-lang.com/images/\#{foo-bar})")
+    assert_equal 'url("http://sass-lang.com/images/foo-bar")', resolve("url('http://sass-lang.com/images/\#{foo-bar}')")
+    assert_equal 'url("http://sass-lang.com/images/foo-bar")', resolve('url("http://sass-lang.com/images/#{foo-bar}")')
+    assert_unquoted "url(http://sass-lang.com/images/\#{foo-bar})"
   end
 
   def test_hyphenated_variables
@@ -303,6 +322,20 @@ SASS
     munge_filename opts
     val = eval(str, opts, environment)
     val.is_a?(Sass::Script::String) ? val.value : val.to_s
+  end
+
+  def assert_unquoted(str, opts = {}, environment = env)
+    munge_filename opts
+    val = eval(str, opts, environment)
+    assert_kind_of Sass::Script::String, val
+    assert_equal :identifier, val.type
+  end
+
+  def assert_quoted(str, opts = {}, environment = env)
+    munge_filename opts
+    val = eval(str, opts, environment)
+    assert_kind_of Sass::Script::String, val
+    assert_equal :string, val.type
   end
 
   def eval(str, opts = {}, environment = env)

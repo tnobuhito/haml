@@ -6,10 +6,12 @@ module Sass
     # The parser for SCSS.
     # It parses a string of code into a tree of {Sass::Tree::Node}s.
     class Parser
-      # @param str [String] The source document to parse
-      def initialize(str)
+      # @param str [String, StringScanner] The source document to parse
+      # @param line [Fixnum] The line on which the source string appeared,
+      #   if it's part of another document
+      def initialize(str, line = 1)
         @template = str
-        @line = 1
+        @line = line
         @strs = []
       end
 
@@ -18,18 +20,38 @@ module Sass
       # @return [Sass::Tree::RootNode] The root node of the document tree
       # @raise [Sass::SyntaxError] if there's a syntax error in the document
       def parse
-        @scanner = StringScanner.new(
-          Haml::Util.check_encoding(@template) do |msg, line|
-            raise Sass::SyntaxError.new(msg, :line => line)
-          end.gsub("\r", ""))
+        init_scanner!
         root = stylesheet
         expected("selector or at-rule") unless @scanner.eos?
         root
       end
 
+      # Parses an identifier with interpolation.
+      # Note that this won't assert that the identifier takes up the entire input string;
+      # it's meant to be used with `StringScanner`s as part of other parsers.
+      #
+      # @return [Array<String, Sass::Script::Node>, nil]
+      #   The interpolated identifier, or nil if none could be parsed
+      def parse_interp_ident
+        init_scanner!
+        interp_ident
+      end
+
       private
 
       include Sass::SCSS::RX
+
+      def init_scanner!
+        @scanner =
+          if @template.is_a?(StringScanner)
+            @template
+          else
+            StringScanner.new(
+              Haml::Util.check_encoding(@template) do |msg, line|
+                raise Sass::SyntaxError.new(msg, :line => line)
+              end.gsub("\r", ""))
+          end
+      end
 
       def stylesheet
         node = node(Sass::Tree::RootNode.new(@scanner.string))
@@ -77,7 +99,7 @@ module Sass
         node << comment
       end
 
-      DIRECTIVES = Set[:mixin, :include, :debug, :warn, :for, :while, :if, :import, :media]
+      DIRECTIVES = Set[:mixin, :include, :debug, :warn, :for, :while, :if, :extend, :import, :media]
 
       def directive
         return unless tok(/@/)
@@ -106,32 +128,32 @@ module Sass
 
       def special_directive(name)
         sym = name.gsub('-', '_').to_sym
-        DIRECTIVES.include?(sym) && send(sym)
+        DIRECTIVES.include?(sym) && send("#{sym}_directive")
       end
 
-      def mixin
+      def mixin_directive
         name = tok! IDENT
         args = sass_script(:parse_mixin_definition_arglist)
         ss
         block(node(Sass::Tree::MixinDefNode.new(name, args)), :directive)
       end
 
-      def include
+      def include_directive
         name = tok! IDENT
         args = sass_script(:parse_mixin_include_arglist)
         ss
         node(Sass::Tree::MixinNode.new(name, args))
       end
 
-      def debug
+      def debug_directive
         node(Sass::Tree::DebugNode.new(sass_script(:parse)))
       end
 
-      def warn
+      def warn_directive
         node(Sass::Tree::WarnNode.new(sass_script(:parse)))
       end
 
-      def for
+      def for_directive
         tok!(/\$/)
         var = tok! IDENT
         ss
@@ -148,13 +170,13 @@ module Sass
         block(node(Sass::Tree::ForNode.new(var, from, to, exclusive)), :directive)
       end
 
-      def while
+      def while_directive
         expr = sass_script(:parse)
         ss
         block(node(Sass::Tree::WhileNode.new(expr)), :directive)
       end
 
-      def if
+      def if_directive
         expr = sass_script(:parse)
         ss
         node = block(node(Sass::Tree::IfNode.new(expr)), :directive)
@@ -173,7 +195,11 @@ module Sass
         else_block(node)
       end
 
-      def import
+      def extend_directive
+        node(Sass::Tree::ExtendNode.new(expr!(:selector)))
+      end
+
+      def import_directive
         @expected = "string or url()"
         arg = tok(STRING) || tok!(URI)
         path = @scanner[1] || @scanner[2] || @scanner[3]
@@ -190,7 +216,7 @@ module Sass
 
       def use_css_import?; false; end
 
-      def media
+      def media_directive
         val = str {media_query_list}.strip
         block(node(Sass::Tree::DirectiveNode.new("@media #{val}")), :directive)
       end
@@ -264,15 +290,7 @@ module Sass
       end
 
       def ruleset
-        rules = []
-        return unless v = selector
-        rules.concat v
-
-        while tok(/,/)
-          rules << ',' << str {ss}
-          rules.concat expr!(:selector)
-        end
-
+        return unless rules = selector_sequence
         block(node(Sass::Tree::RuleNode.new(rules.flatten.compact)), :ruleset)
       end
 
@@ -296,6 +314,7 @@ module Sass
       end
 
       def block_child(context)
+        return variable || directive || ruleset if context == :stylesheet
         variable || directive || declaration_or_ruleset
       end
 
@@ -340,75 +359,124 @@ module Sass
         @use_property_exception = old_use_property_exception
       end
 
-      def selector
-        # The combinator here allows the "> E" hack
-        return unless (comb = combinator) || (seq = simple_selector_sequence)
-        res = [comb] + (seq || [])
-
-        while v = combinator
-          res << v
-          res.concat(simple_selector_sequence || [])
+      def selector_sequence
+        if sel = tok(STATIC_SELECTOR)
+          return [sel]
         end
-        res
+
+        rules = []
+        return unless v = selector
+        rules.concat v
+
+        while tok(/,/)
+          rules << ',' << str {ss}
+          rules.concat expr!(:selector)
+        end
+        rules
+      end
+
+      def selector
+        return unless sel = _selector
+        sel.to_a
+      end
+
+      def _selector
+        # The combinator here allows the "> E" hack
+        return unless val = combinator || simple_selector_sequence
+        nl = str{ss}.include?("\n")
+        res = []
+        res << val
+        res << "\n" if nl
+
+        while val = combinator || simple_selector_sequence
+          res << val
+          res << "\n" if str{ss}.include?("\n")
+        end
+        Selector::Sequence.new(res.compact)
       end
 
       def combinator
-        tok(PLUS) || tok(GREATER) || tok(TILDE) || str?{whitespace}
+        tok(PLUS) || tok(GREATER) || tok(TILDE)
       end
 
       def simple_selector_sequence
         # This allows for stuff like http://www.w3.org/TR/css3-animations/#keyframes-
         return expr unless e = element_name || id_selector || class_selector ||
-          attrib || negation || pseudo || parent_selector || interpolation
+          attrib || negation || pseudo || parent_selector || interpolation_selector
         res = [e]
 
         # The tok(/\*/) allows the "E*" hack
         while v = element_name || id_selector || class_selector ||
-            attrib || negation || pseudo || tok(/\*/) || interpolation
+            attrib || negation || pseudo || interpolation_selector ||
+            (tok(/\*/) && Selector::Universal.new(nil))
           res << v
         end
-        res
+        expected('"{"') if tok?(/&/)
+
+        Selector::SimpleSequence.new(res)
       end
 
       def parent_selector
-        tok(/&/)
+        return unless tok(/&/)
+        Selector::Parent.new
       end
 
       def class_selector
         return unless tok(/\./)
         @expected = "class name"
-        ['.', expr!(:interp_ident)]
+        Selector::Class.new(merge(expr!(:interp_ident)))
       end
 
       def id_selector
         return unless tok(/#(?!\{)/)
         @expected = "id name"
-        ['#', expr!(:interp_name)]
+        Selector::Id.new(merge(expr!(:interp_name)))
       end
 
       def element_name
-        return unless name = interp_ident || tok(/\*/) || tok?(/\|/)
+        return unless name = interp_ident || tok(/\*/) || (tok?(/\|/) && "")
         if tok(/\|/)
           @expected = "element name or *"
-          name << "|" << (interp_ident || tok!(/\*/))
+          ns = name
+          name = interp_ident || tok!(/\*/)
         end
-        name
+
+        if name == '*'
+          Selector::Universal.new(merge(ns))
+        else
+          Selector::Element.new(merge(name), merge(ns))
+        end
+      end
+
+      def interpolation_selector
+        return unless script = interpolation
+        Selector::Interpolation.new(script)
       end
 
       def attrib
         return unless tok(/\[/)
-        res = ['[', str{ss}, attrib_name!, str{ss}]
+        ss
+        ns, name = attrib_name!
+        ss
 
-        if m = tok(/=/) ||
+        if op = tok(/=/) ||
             tok(INCLUDES) ||
             tok(DASHMATCH) ||
             tok(PREFIXMATCH) ||
             tok(SUFFIXMATCH) ||
             tok(SUBSTRINGMATCH)
           @expected = "identifier or string"
-          res << m << str{ss} << (tok(IDENT) || expr!(:interp_string)) << str{ss}
+          ss
+          if val = tok(IDENT)
+            val = [val]
+          else
+            val = expr!(:interp_string)
+          end
+          ss
         end
-        res << tok!(/\]/)
+        tok(/\]/)
+
+        Selector::Attribute.new(merge(name), merge(ns), op, merge(val))
       end
 
       def attrib_name!
@@ -422,19 +490,23 @@ module Sass
           end
         else
           # *|E or |E
-          ns = tok(/\*/) || ""
+          ns = [tok(/\*/) || ""]
           tok!(/\|/)
           name = expr!(:interp_ident)
         end
-        return [ns, ("|" if ns), name]
+        return ns, name
       end
 
       def pseudo
         return unless s = tok(/::?/)
         @expected = "pseudoclass or pseudoelement"
-        res = [s, expr!(:interp_ident)]
-        return res unless tok(/\(/)
-        res << '(' << str{ss} << expr!(:pseudo_expr) << tok!(/\)/)
+        name = expr!(:interp_ident)
+        if tok(/\(/)
+          ss
+          arg = expr!(:pseudo_expr)
+          tok!(/\)/)
+        end
+        Selector::Pseudo.new(s == ':' ? :class : :element, merge(name), merge(arg))
       end
 
       def pseudo_expr
@@ -450,10 +522,11 @@ module Sass
 
       def negation
         return unless tok(NOT)
-        res = [":not(", str{ss}]
+        ss
         @expected = "selector"
-        res << (element_name || id_selector || class_selector || attrib || expr!(:pseudo))
-        res << tok!(/\)/)
+        sel = element_name || id_selector || class_selector || attrib || expr!(:pseudo)
+        tok!(/\)/)
+        Selector::Negation.new(sel)
       end
 
       def declaration
@@ -467,8 +540,8 @@ module Sass
         end
         ss
 
-        @expected = expected_property_separator
-        space, value = expr!(:value)
+        tok!(/:/)
+        space, value = value!
         ss
         require_block = tok?(/\{/)
 
@@ -478,16 +551,19 @@ module Sass
         nested_properties! node, space
       end
 
-      def expected_property_separator
-        '":" or "="'
-      end
-
-      def value
-        return unless tok(/:/)
+      def value!
         space = !str {ss}.empty?
         @use_property_exception ||= space || !tok?(IDENT)
 
         return true, Sass::Script::String.new("") if tok?(/\{/)
+        # This is a bit of a dirty trick:
+        # if the value is completely static,
+        # we don't parse it at all, and instead return a plain old string
+        # containing the value.
+        # This results in a dramatic speed increase.
+        if val = tok(STATIC_VALUE)
+          return space, Sass::Script::String.new(val.strip)
+        end
         return space, sass_script(:parse)
       end
 
@@ -616,6 +692,10 @@ MESSAGE
         result
       end
 
+      def merge(arr)
+        arr && Haml::Util.merge_adjacent_strings([arr].flatten)
+      end
+
       EXPR_NAMES = {
         :media_query => "media query (e.g. print, screen, print and screen)",
         :media_expr => "media expression (e.g. (min-device-width: 800px)))",
@@ -623,11 +703,13 @@ MESSAGE
         :interp_ident => "identifier",
         :interp_name => "identifier",
         :expr => "expression (e.g. 1px, bold)",
+        :_selector => "selector",
+        :simple_selector_sequence => "selector",
       }
 
       TOK_NAMES = Haml::Util.to_hash(
         Sass::SCSS::RX.constants.map {|c| [Sass::SCSS::RX.const_get(c), c.downcase]}).
-        merge(IDENT => "identifier", /[;}]/ => '";"', /[=:]/ => '":"')
+        merge(IDENT => "identifier", /[;}]/ => '";"')
 
       def tok?(rx)
         @scanner.match?(rx)

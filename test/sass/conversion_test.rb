@@ -183,7 +183,7 @@ SASS
   def test_multiline_properties
     assert_scss_to_sass <<SASS, <<SCSS
 foo bar
-  baz: bip bam boon
+  baz: bip   bam         boon
 SASS
 foo bar {
   baz:
@@ -194,7 +194,7 @@ SCSS
 
     assert_scss_to_scss <<OUT, <<IN
 foo bar {
-  baz: bip bam boon; }
+  baz: bip   bam         boon; }
 OUT
 foo bar {
   baz:
@@ -915,7 +915,7 @@ SCSS
     assert_selector_renders['> E']
     assert_selector_renders['+ E']
     assert_selector_renders['~ E']
-    assert_selector_renders['>> E']
+    assert_selector_renders['> > E']
 
     assert_selector_renders['E*']
     assert_selector_renders['E*.foo']
@@ -1028,6 +1028,26 @@ div
   @for $for_var from $from_var to $to_var
     @while $while_var == true
       $while_var : false
+SASS
+  end
+
+  def test_sass2_var_in_property_interpolation
+assert_sass_to_scss <<SCSS, <<SASS
+foo {
+  a: b \#{$c} d; }
+SCSS
+foo
+  a: b \#{!c} d
+SASS
+  end
+
+  def test_sass2_var_in_selector_interpolation
+assert_sass_to_scss <<SCSS, <<SASS
+foo-\#{$c} {
+  a: b; }
+SCSS
+foo-\#{!c}
+  a: b
 SASS
   end
 

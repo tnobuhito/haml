@@ -126,7 +126,11 @@ module ActionView
       end
 
       def content_tag(*args)
-        content_tag_with_haml(*args)
+        html_tag = content_tag_with_haml(*args)
+        return html_tag unless respond_to?(:error_wrapping)
+        return error_wrapping(html_tag) if method(:error_wrapping).arity == 1
+        return html_tag unless object.respond_to?(:errors) && object.errors.respond_to?(:on)
+        return error_wrapping(html_tag, object.errors.on(@method_name))
       end
     end
 
@@ -156,9 +160,7 @@ module ActionView
         def form_for_with_haml(object_name, *args, &proc)
           if block_given? && is_haml?
             oldproc = proc
-            proc = haml_bind_proc do |*args|
-              with_tabs(1) {oldproc.call(*args)}
-            end
+            proc = proc {|*args| with_tabs(1) {oldproc.call(*args)}}
           end
           res = form_for_without_haml(object_name, *args, &proc)
           res << "\n" if block_given? && is_haml?

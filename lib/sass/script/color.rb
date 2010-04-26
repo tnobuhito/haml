@@ -19,7 +19,6 @@ module Sass::Script
     class << self; include Haml::Util; end
 
     # A hash from color names to `[red, green, blue]` value arrays.
-    # @private
     HTML4_COLORS = map_vals({
         'black'   => 0x000000,
         'silver'  => 0xc0c0c0,
@@ -39,7 +38,6 @@ module Sass::Script
         'aqua'    => 0x00ffff
       }) {|color| (0..2).map {|n| color >> (n << 3) & 0xff}.reverse}
     # A hash from `[red, green, blue]` value arrays to color names.
-    # @private
     HTML4_COLORS_REVERSE = map_hash(HTML4_COLORS) {|k, v| [v, k]}
 
     # Constructs an RGB or HSL color object,
@@ -108,7 +106,10 @@ module Sass::Script
       end
 
       [:saturation, :lightness].each do |k|
-        next if @attrs[k].nil? || (0..100).include?(@attrs[k])
+        next if @attrs[k].nil?
+        @attrs[k] = 0 if @attrs[k] < 0.00001 && @attrs[k] > -0.00001
+        @attrs[k] = 100 if @attrs[k] - 100 < 0.00001 && @attrs[k] - 100 > -0.00001
+        next if (0..100).include?(@attrs[k])
         raise Sass::SyntaxError.new("#{k.to_s.capitalize} must be between 0 and 100")
       end
 

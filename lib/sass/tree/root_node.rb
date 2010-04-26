@@ -62,6 +62,7 @@ module Sass
 
       protected
 
+      # @see Node#to_src
       def to_src(opts, fmt)
         Haml::Util.enum_cons(children + [nil], 2).map do |child, nxt|
           child.send("to_#{fmt}", 0, opts) +
@@ -73,20 +74,6 @@ module Sass
               "\n"
             end
         end.join.rstrip + "\n"
-      end
-
-      # Destructively converts this static Sass node into a static CSS node,
-      # and checks that there are no properties at root level.
-      #
-      # @param parent [Node, nil] The parent node of this node.
-      #   This should only be non-nil if the parent is the same class as this node
-      # @see Node#cssize!
-      def cssize!(parent)
-        super
-        return unless child = children.find {|c| c.is_a?(PropNode)}
-        message = "Properties aren't allowed at the root of a document." +
-          child.pseudo_class_selector_message
-        raise Sass::SyntaxError.new(message, :line => child.line)
       end
 
       # Computes the CSS corresponding to this Sass tree.
@@ -106,12 +93,16 @@ module Sass
         return result + "\n"
       end
 
-      # Returns false, because all nodes are allowed at the root of the document
-      # (properties are detected elsewhere post-mixin-resolution).
+      # Returns an error message if the given child node is invalid,
+      # and false otherwise.
+      #
+      # Only property nodes are invalid at root level.
       #
       # @see Node#invalid_child?
       def invalid_child?(child)
-        false
+        return unless child.is_a?(Tree::PropNode)
+        "Properties aren't allowed at the root of a document." +
+          child.pseudo_class_selector_message
       end
     end
   end

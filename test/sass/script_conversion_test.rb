@@ -53,6 +53,12 @@ class SassScriptConversionTest < Test::Unit::TestCase
     assert_renders "-foo(12px)"
   end
 
+  def test_url
+    assert_renders "url(foo.gif)"
+    assert_renders "url($var)"
+    assert_renders "url(\#{$var}/flip.gif)"
+  end
+
   def test_variable
     assert_renders "$foo-bar"
     assert_renders "$flaznicate"
@@ -178,6 +184,16 @@ RUBY
     assert_equal "unquote(\"f'o\#{$bar}b'z\")", render("'f\\'o\#{$bar}b\\'z'", :context => :equals)
     assert_equal "unquote('f\"o\#{$bar}b\"z')", render("'f\\\"o\#{$bar}b\\\"z'", :context => :equals)
     assert_equal "unquote(\"f'o\#{$bar}b\\\"z\")", render("'f\\'o\#{$bar}b\\\"z'", :context => :equals)
+  end
+
+  def test_sass2_urls
+    Haml::Util.silence_haml_warnings do
+      assert_equal 'url(foo/bar.gif)', render('url(foo/bar.gif)', :context => :equals)
+      assert_equal 'url("foo/bar.gif")', render('url("foo/bar.gif")', :context => :equals)
+
+      assert_equal 'url($var)', render('url(!var)', :context => :equals)
+      assert_equal 'url("#{$var}/flip.gif")', render('url("#{!var}/flip.gif")', :context => :equals)
+    end
   end
 
   private

@@ -65,7 +65,8 @@ module Sass
       NAME     = /#{NMCHAR}+/
       NUM      = /[0-9]+|[0-9]*.[0-9]+/
       STRING   = /#{STRING1}|#{STRING2}/
-      URL      = /((?:[!#%$&*-~]|#{NONASCII}|#{ESCAPE})*)/
+      URLCHAR  = /[#%&*-~]|#{NONASCII}|#{ESCAPE}/
+      URL      = /(#{URLCHAR}*)/
       W        = /[ \t\r\n\f]*/
 
       # This is more liberal than the spec's definition,
@@ -108,6 +109,13 @@ module Sass
       # Custom
       HEXCOLOR = /\#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?/
       INTERP_START = /#\{/
+
+      STRING1_NOINTERP = /\"((?:[^\n\r\f\\"#]|#(?!\{)|\\#{NL}|#{ESCAPE})*)\"/
+      STRING2_NOINTERP = /\'((?:[^\n\r\f\\'#]|#(?!\{)|\\#{NL}|#{ESCAPE})*)\'/
+      STRING_NOINTERP = /#{STRING1_NOINTERP}|#{STRING2_NOINTERP}/
+      STATIC_VALUE = /(#{NMCHAR}|#{STRING1_NOINTERP}|\s(?!%)|#[a-f0-9]|[,%]|\.[0-9]|\!important)+(?=[;}])/i
+
+      STATIC_SELECTOR = /(#{NMCHAR}|\s|[,>+*]|[:#.]#{NMSTART})+(?=[{])/i
     end
   end
 end

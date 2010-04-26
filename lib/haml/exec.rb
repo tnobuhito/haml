@@ -115,7 +115,6 @@ module Haml
         @options[:input], @options[:output] = input, output
       end
 
-      # @private
       COLORS = { :red => 31, :green => 32, :yellow => 33 }
 
       # Prints a status message about performing the given action,
@@ -298,7 +297,7 @@ END
           @options[:for_engine][:cache_location] = loc
         end
         opts.on('-C', '--no-cache', "Don't cache to sassc files.") do
-          @options[:for_engine][:cache] = false
+          @options[:for_engine][:read_cache] = false
         end
       end
 
@@ -569,8 +568,9 @@ END
       # @param args [Array<String>] The command-line arguments
       def initialize(args)
         super
+        require 'sass'
         @options[:for_tree] = {}
-        @options[:for_engine] = {}
+        @options[:for_engine] = {:cache => false, :read_cache => true}
       end
 
       # Tells optparse how to parse the arguments.
@@ -630,7 +630,7 @@ END
         end
 
         opts.on('-C', '--no-cache', "Don't cache to sassc files.") do
-          @options[:for_engine][:cache] = false
+          @options[:for_engine][:read_cache] = false
         end
 
         super
@@ -654,6 +654,8 @@ END
         process_file(input, output)
       end
 
+      private
+
       def process_directory
         input = @options[:input] = @args.shift
         output = @options[:output] = @args.shift
@@ -664,6 +666,11 @@ END
           raise "Error: '#{@options[:output]}' is not a directory"
         end
         @options[:output] ||= @options[:input]
+
+        if @options[:to] == @options[:from] && !@options[:in_place]
+          fmt = @options[:from]
+          raise "Error: converting from #{fmt} to #{fmt} without --in-place"
+        end
 
         ext = @options[:from]
         ext = :sass if ext == :sass2

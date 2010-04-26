@@ -40,7 +40,6 @@ module Sass
       attr_reader :offset
 
       # A hash from operator strings to the corresponding token types.
-      # @private
       OPERATORS = {
         '+' => :plus,
         '-' => :minus,
@@ -67,10 +66,8 @@ module Sass
         '{' => :lcurly,
       }
 
-      # @private
       OPERATORS_REVERSE = Haml::Util.map_hash(OPERATORS) {|k, v| [v, k]}
 
-      # @private
       TOKEN_NAMES = Haml::Util.map_hash(OPERATORS_REVERSE) {|k, v| [k, v.inspect]}.merge({
           :const => "variable (e.g. $foo)",
           :ident => "identifier (e.g. middle)",
@@ -79,22 +76,19 @@ module Sass
 
       # A list of operator strings ordered with longer names first
       # so that `>` and `<` don't clobber `>=` and `<=`.
-      # @private
       OP_NAMES = OPERATORS.keys.sort_by {|o| -o.size}
 
       # A sub-list of {OP_NAMES} that only includes operators
       # with identifier names.
-      # @private
       IDENT_OP_NAMES = OP_NAMES.select {|k, v| k =~ /^\w+/}
 
       # A hash of regular expressions that are used for tokenizing.
-      # @private
       REGULAR_EXPRESSIONS = {
         :whitespace => /\s+/,
         :comment => COMMENT,
         :single_line_comment => SINGLE_LINE_COMMENT,
         :variable => /([!\$])(#{IDENT})/,
-        :ident => IDENT,
+        :ident => /(#{IDENT})(\()?/,
         :number => /(-)?(?:(\d*\.\d+)|(\d+))([a-zA-Z%]+)?/,
         :color => HEXCOLOR,
         :bool => /(true|false)\b/,
@@ -120,6 +114,8 @@ module Sass
         [:single, false] => string_re("'", "'"),
         [:double, true] => string_re('', '"'),
         [:single, true] => string_re('', "'"),
+        [:uri, false] => /url\(#{W}(#{URLCHAR}*?)(#{W}\)|(?=#\{))/,
+        [:uri, true] => /(#{URLCHAR}*?)(#{W}\)|(?=#\{))/,
       }
 
       # @param str [String, StringScanner] The source text to lex
@@ -179,11 +175,24 @@ module Sass
         @scanner.eos? && @tok.nil?
       end
 
+      # Raise an error to the effect that `name` was expected in the input stream
+      # and wasn't found.
+      #
+      # This calls \{#unpeek!} to rewind the scanner to immediately after
+      # the last returned token.
+      #
+      # @param name [String] The name of the entity that was expected but not found
+      # @raise [Sass::SyntaxError]
       def expected!(name)
         unpeek!
         Sass::SCSS::Parser.expected(@scanner, name, @line)
       end
 
+      # Records all non-comment text the lexer consumes within the block
+      # and returns it as a string.
+      #
+      # @yield A block in which text is recorded
+      # @return [String]
       def str
         old_pos = @tok ? @tok.pos : @scanner.pos
         yield
@@ -216,8 +225,8 @@ module Sass
         end
 
         variable || string(:double, false) || string(:single, false) || number ||
-          color || bool || raw(URI) || raw(UNICODERANGE) || special_fun ||
-          ident_op || ident || op
+          color || bool || string(:uri, false) || raw(UNICODERANGE) ||
+          special_fun || ident_op || ident || op
       end
 
       def variable
@@ -236,14 +245,20 @@ module Sass
       end
 
       def ident
-        return unless s = scan(REGULAR_EXPRESSIONS[:ident])
-        [:ident, s]
+        return unless scan(REGULAR_EXPRESSIONS[:ident])
+        [@scanner[2] ? :funcall : :ident, @scanner[1]]
       end
 
       def string(re, open)
         return unless scan(STRING_REGULAR_EXPRESSIONS[[re, open]])
         @interpolation_stack << re if @scanner[2].empty? # Started an interpolated section
-        [:string, Script::String.new(@scanner[1].gsub(/\\(['"]|\#\{)/, '\1'), :string)]
+        str =
+          if re == :uri
+            Script::String.new("#{'url(' unless open}#{@scanner[1]}#{')' unless @scanner[2].empty?}")
+          else
+            Script::String.new(@scanner[1].gsub(/\\(['"]|\#\{)/, '\1'), :string)
+          end
+        [:string, str]
       end
 
       def number
@@ -269,11 +284,13 @@ module Sass
         return unless str1 = scan(/(calc|expression|progid:[a-z\.]*)\(/i)
         str2, _ = Haml::Shared.balance(@scanner, ?(, ?), 1)
         c = str2.count("\n")
+        old_line = @line
+        old_offset = @offset
         @line += c
         @offset = (c == 0 ? @offset + str2.size : str2[/\n(.*)/, 1].size)
         [:special_fun,
           Haml::Util.merge_adjacent_strings(
-            [str1] + Sass::Engine.parse_interp(str2, @line, @options)),
+            [str1] + Sass::Engine.parse_interp(str2, old_line, old_offset, @options)),
           str1.size + str2.size]
       end
 

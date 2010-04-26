@@ -1,8 +1,3 @@
-if defined?(ActionView)
-  require 'haml/helpers/action_view_mods'
-  require 'haml/helpers/action_view_extensions'
-end
-
 module Haml
   # This module contains various helpful methods to make it easier to do various tasks.
   # {Haml::Helpers} is automatically included in the context
@@ -52,8 +47,7 @@ MESSAGE
 
     self.extend self
 
-    @@action_view_defined = defined?(ActionView)
-    @@force_no_action_view = false
+    @@action_view_defined = false
 
     # @return [Boolean] Whether or not ActionView is loaded
     def self.action_view?
@@ -500,7 +494,6 @@ MESSAGE
     end
 
     # Characters that need to be escaped to HTML entities from user input
-    # @private
     HTML_ESCAPE = { '&'=>'&amp;', '<'=>'&lt;', '>'=>'&gt;', '"'=>'&quot;', "'"=>'&#039;', }
 
     # Returns a copy of `text` with ampersands, angle brackets and quotes
@@ -594,11 +587,10 @@ MESSAGE
       _erbout = _hamlout.buffer
       proc { |*args| proc.call(*args) }
     end
-
-    include ActionViewExtensions if self.const_defined? "ActionViewExtensions"
   end
 end
 
+# @private
 class Object
   # Haml overrides various `ActionView` helpers,
   # which call an \{#is\_haml?} method

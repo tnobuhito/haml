@@ -3,6 +3,167 @@
 * Table of contents
 {:toc}
 
+## 3.0.0.rc.1
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.rc.1).
+
+### `@extend`
+
+There are often cases when designing a page
+when one class should have all the styles of another class,
+as well as its own specific styles.
+The most common way of handling this is to use both the more general class
+and the more specific class in the HTML.
+For example, suppose we have a design for a normal error
+and also for a serious error. We might write our markup like so:
+
+    <div class="error seriousError">
+      Oh no! You've been hacked!
+    </div>
+
+And our styles like so:
+
+    .error {
+      border: 1px #f00;
+      background-color: #fdd;
+    }
+    .seriousError {
+      border-width: 3px;
+    }
+
+Unfortunately, this means that we have to always remember
+to use `.error` with `.seriousError`.
+This is a maintenance burden, leads to tricky bugs,
+and can bring non-semantic style concerns into the markup.
+
+The `@extend` directive avoids these problems
+by telling Sass that one selector should inherit the styles of another selector.
+For example:
+
+    .error {
+      border: 1px #f00;
+      background-color: #fdd;
+    }
+    .seriousError {
+      @extend .error;
+      border-width: 3px;
+    }
+
+This means that all styles defined for `.error`
+are also applied to `.seriousError`,
+in addition to the styles specific to `.seriousError`.
+In effect, everything with class `.seriousError` also has class `.error`.
+
+Other rules that use `.error` will work for `.seriousError` as well.
+For example, if we have special styles for errors caused by hackers:
+
+    .error.intrusion {
+      background-image: url("/image/hacked.png");
+    }
+
+Then `<div class="seriousError intrusion">`
+will have the `hacked.png` background image as well.
+
+    .error {
+      @extend .criticalError;
+      border: 1px #f00;
+      background-color: #fdd;
+    }
+    .seriousError {
+      @extend .error;
+      border-width: 3px;
+    }
+    .criticalError {
+      @extend .seriousError;
+      position: fixed;
+      top: 10%;
+      bottom: 10%;
+      left: 10%;
+      right: 10%;
+    }
+
+#### How it Works
+
+`@extend` works by inserting the extending selector (e.g. `.seriousError`)
+anywhere in the stylesheet that the extended selector (.e.g `.error`) appears.
+Thus the example above:
+
+    .error {
+      border: 1px #f00;
+      background-color: #fdd;
+    }
+    .error.intrusion {
+      background-image: url("/image/hacked.png");
+    }
+    .seriousError {
+      @extend .error;
+      border-width: 3px;
+    }
+
+is compiled to:
+
+    .error, .seriousError {
+      border: 1px #f00;
+      background-color: #fdd; }
+
+    .error.intrusion, .seriousError.intrusion {
+      background-image: url("/image/hacked.png"); }
+
+    .seriousError {
+      border-width: 3px; }
+
+When merging selectors, `@extend` is smart enough
+to avoid unnecessary duplication,
+so something like `.seriousError.seriousError` gets translated to `.seriousError`.
+In addition, it won't produce selectors that can't match anything, like `#main#footer`.
+
+See also {file:SASS_REFERENCE.md#extend the `@extend` reference documentation}.
+
+### Sass Property Syntax
+
+New-style properties (with the colon after the name) in the indented syntax
+now allow whitespace before the colon. For example:
+
+    foo
+      color : blue
+
+### `Sass::Plugin.force_update_stylesheets`
+
+{Sass::Plugin} has a new method, {Sass::Plugin#force_update_stylesheets force_update_stylesheets}.
+This functions just like {Sass::Plugin#update_stylesheets},
+except that it doesn't check modification times and doesn't use the cache;
+all stylesheets are always compiled anew.
+
+### Minor Changes
+
+* Running `sass-convert --from sass --to sass` will raise an error
+  unless `--in-place` is provided,
+  to prevent accidental erasure of source files.
+
+* SCSS parsing speed is dramatically improved.
+
+* Add a `:read_cache` option to allow the Sass cache to be read from but not written to.
+
+* Don't write to the Sass cache when running `sass-convert`.
+
+### Bug Fixes
+
+* Variables are now allowed as arguments to `url()`.
+
+* `#{}` interpolation is now allowed within `url()`.
+
+* `url()`s within Sass2 properties are properly converted to Sass 3 or SCSS now.
+
+* Don't consider e.g. `foo ($bar + $baz)` to be a function call.
+  Function calls can't have whitespace between the name and the parentheses.
+
+* Allow interpolation in Sass properties to contain spaces.
+
+* Don't crash with odd HSL errors for some color functions.
+
+* Don't crash when files fail to exist in certain obscure updating circumstances
+  (thanks to [thedarkone](http://github.com/thedarkone)).
+
 ## 3.0.0.beta.3
 
 [Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.beta.3).
@@ -640,6 +801,13 @@ and the hex representation (shortened to the three-letter version if possible).
   rather than `fuchsia 12`,
   and `tealbang(12)` now renders as `tealbang(12)`
   rather than `teal bang(12)`.
+
+## 2.2.24 (Unreleased)
+
+* Parent references -- the `&` character --
+  may only be placed at the beginning of simple selector sequences in Sass 3.
+  Placing them elsewhere is deprecated in 2.2.24 and will print a warning.
+  For example, `foo &.bar` is allowed, but `foo .bar&` is not.
 
 ## 2.2.23
 

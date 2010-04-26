@@ -15,6 +15,10 @@ module Sass::Script
     # @return [Symbol] `:string` or `:identifier`
     attr_reader :type
 
+    # In addition to setting the \{#context} of the string,
+    # this sets the string to be an identifier if the context is `:equals`.
+    #
+    # @see Node#context=
     def context=(context)
       super
       @type = :identifier if context == :equals
@@ -29,6 +33,7 @@ module Sass::Script
       @type = type
     end
 
+    # @see Literal#plus
     def plus(other)
       other_str = other.is_a?(Sass::Script::String) ? other.value : other.to_s
       Sass::Script::String.new(self.value + other_str, self.type)
@@ -47,12 +52,13 @@ module Sass::Script
     def to_sass(opts = {})
       type = opts[:type] || self.type
       if type == :identifier
-        if context == :equals && Sass::SCSS::RX.escape_ident(self.value).include?(?\\)
+        if context == :equals && self.value !~ Sass::SCSS::RX::URI &&
+            Sass::SCSS::RX.escape_ident(self.value).include?(?\\)
           return "unquote(#{Sass::Script::String.new(self.value, :string).to_sass})"
         elsif context == :equals && self.value.size == 0
           return %q{""}
         end
-        return self.value
+        return self.value.gsub("\n", " ")
       end
 
       return "\"#{value.gsub('"', "\\\"")}\"" if opts[:quote] == %q{"}
