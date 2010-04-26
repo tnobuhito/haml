@@ -3,6 +3,22 @@
 * Table of contents
 {:toc}
 
+## 3.0.0.rc.2 (Unreleased)
+
+### CSS Hack Support
+
+The CSS comment hack that selects for IE6 is now allowed in properties.
+For example:
+
+    #main { color/**/: blue }
+
+This hack was allowed in Sass prior to RC 1, but was broken in RC 1.
+This is the first time it's worked in SCSS, since the comment was silently swallowed.
+
+### Bug Fixes
+
+* Properly report line numbers for invalid selectors.
+
 ## 3.0.0.rc.1
 
 [Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.0.rc.1).
