@@ -58,8 +58,8 @@ module Haml
         # SyntaxErrors have weird line reporting
         # when there's trailing whitespace,
         # which there is for Haml documents.
-        return exception.message.scan(/:(\d+)/).first.first if exception.is_a?(::SyntaxError)
-        exception.backtrace[0].scan(/:(\d+)/).first.first
+        return (exception.message.scan(/:(\d+)/).first || ["??"]).first if exception.is_a?(::SyntaxError)
+        (exception.backtrace[0].scan(/:(\d+)/).first || ["??"]).first
       end
 
       # Tells optparse how to parse the arguments
@@ -371,8 +371,9 @@ MSG
         end
 
         dirs, files = @args.map {|name| name.split(':', 2)}.
-          map {|from, to| [from, to || from.gsub(/\..*?$/, '.css')]}.
           partition {|i, _| File.directory? i}
+        files.map! {|from, to| [from, to || from.gsub(/\..*?$/, '.css')]}
+        dirs.map! {|from, to| [from, to || from]}
         ::Sass::Plugin.options[:template_location] = dirs
 
         ::Sass::Plugin.on_updating_stylesheet do |_, css|
@@ -648,7 +649,7 @@ END
 
         super
         input = @options[:input]
-        raise "Error: '#{input}' is a directory (did you mean to use --recursive?)" if File.directory?(input)
+        raise "Error: '#{input.path}' is a directory (did you mean to use --recursive?)" if File.directory?(input)
         output = @options[:output]
         output = input if @options[:in_place]
         process_file(input, output)
@@ -750,7 +751,8 @@ END
         output.write(out)
       rescue ::Sass::SyntaxError => e
         raise e if @options[:trace]
-        raise "Syntax error on line #{get_line e}: #{e.message}\n  Use --trace for backtrace"
+        file = " of #{e.sass_filename}" if e.sass_filename
+        raise "Error on line #{e.sass_line}#{file}: #{e.message}\n  Use --trace for backtrace"
       end
     end
   end

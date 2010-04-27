@@ -23,6 +23,19 @@ foo bar {
 SCSS
   end
 
+  def test_empty_selector
+    assert_renders "foo bar", "foo bar {}"
+  end
+
+  def test_empty_directive
+    assert_scss_to_sass "@media screen", "@media screen {}"
+    assert_scss_to_scss "@media screen {}"
+  end
+
+  def test_empty_control_directive
+    assert_renders "@if false", "@if false {}"
+  end
+
   def test_nesting
     assert_renders <<SASS, <<SCSS
 foo bar
@@ -873,6 +886,60 @@ foo {
 SCSS
 
     assert_sass_to_scss '$var: 12px $bar baz !default;', '$var ||= 12px $bar "baz"'
+  end
+
+  def test_division_asserted_with_parens
+    assert_renders <<SASS, <<SCSS
+foo
+  a: (1px / 2px)
+SASS
+foo {
+  a: (1px / 2px); }
+SCSS
+  end
+
+  def test_division_not_asserted_when_unnecessary
+    assert_renders <<SASS, <<SCSS
+$var: 1px / 2px
+
+foo
+  a: $var
+SASS
+$var: 1px / 2px;
+
+foo {
+  a: $var; }
+SCSS
+
+    assert_renders <<SASS, <<SCSS
+$var: 1px
+
+foo
+  a: $var / 2px
+SASS
+$var: 1px;
+
+foo {
+  a: $var / 2px; }
+SCSS
+
+    assert_renders <<SASS, <<SCSS
+foo
+  a: 1 + 1px / 2px
+SASS
+foo {
+  a: 1 + 1px / 2px; }
+SCSS
+  end
+
+  def test_literal_slash
+    assert_renders <<SASS, <<SCSS
+foo
+  a: 1px / 2px
+SASS
+foo {
+  a: 1px / 2px; }
+SCSS
   end
 
   # Hacks

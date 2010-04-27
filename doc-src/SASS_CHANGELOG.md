@@ -38,6 +38,15 @@ rather than:
 
 * Pseudo-selectors remain at the end of selectors that are merged via `@extend`.
 
+* Empty selectors render like `.foo {}` when converted to SCSS using `sass-convert`.
+
+* Allow `@extend` to be used within mixins.
+
+* `sass --update .` now compiles all Sass/SCSS files in the current directory into CSS files.
+  Same for `sass --watch .`.
+
+* Report the filename when a syntax error is found with `sass-convert`.
+
 ### Bug Fixes
 
 * Properly report line numbers for invalid selectors.
@@ -45,6 +54,11 @@ rather than:
 * `@extend` is converted via `sass-convert`.
 
 * Fix Ruby 1.8.6 support.
+
+* Make sure division is always converted to division with `sass-convert`,
+  and never to `num/num` literals.
+
+* Don't report duplicate load paths when a file can't be found.
 
 ## 3.0.0.rc.1
 
