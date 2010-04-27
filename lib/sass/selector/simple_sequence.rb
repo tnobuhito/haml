@@ -62,21 +62,18 @@ module Sass
       #   by extending this selector with `extends`.
       # @see CommaSequence#do_extend
       def do_extend(extends, supers = [])
-        seqs = extends.get(members.to_set).map do |seq, sels|
+        extends.get(members.to_set).map do |seq, sels|
           # If A {@extend B} and C {...},
           # seq is A, sels is B, and self is C
 
           self_without_sel = self.members - sels
           next unless unified = seq.members.last.unify(self_without_sel)
           [sels, seq.members[0...-1] + [unified]]
-        end.compact.map {|sels, seq| [sels, Sequence.new(seq)]}
-
-        seqs.map {|_, seq| seq}.concat(
-          seqs.map do |sels, seq|
-            new_seqs = seq.do_extend(extends, supers.unshift(sels))[1..-1]
-            supers.shift
-            new_seqs
-          end.flatten.uniq)
+        end.compact.map {|sels, seq| [sels, Sequence.new(seq)]}.map do |sels, seq|
+          seqs = seq.do_extend(extends, supers.unshift(sels))
+          supers.shift
+          seqs
+        end.flatten.uniq
       rescue SystemStackError
         handle_extend_loop(supers)
       end
@@ -100,6 +97,10 @@ module Sass
           sel.unify(sseq)
         end
         SimpleSequence.new(sseq)
+      end
+
+      def superselector?(sseq)
+        (base.nil? || base.eql?(sseq.base)) && rest.subset?(sseq.rest)
       end
 
       # @see Simple#to_a
