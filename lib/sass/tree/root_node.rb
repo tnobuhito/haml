@@ -21,6 +21,16 @@ module Sass
         raise e
       end
 
+      # Runs the dynamic Sass code *and* computes the CSS for the tree.
+      #
+      # @see #perform
+      # @see #to_s
+      def render
+        result, extends = perform(Environment.new).cssize
+        result = result.do_extend(extends) unless extends.empty?
+        result.to_s
+      end
+
       # @see Node#perform
       def perform(environment)
         environment.options = @options if environment.options.nil? || environment.options.empty?
@@ -30,9 +40,14 @@ module Sass
         raise e
       end
 
-      # @see Node#cssize
-      def cssize(*args)
-        super
+      # Like {Node#cssize}, except that this method
+      # will create its own `extends` map if necessary,
+      # and it returns that map along with the cssized tree.
+      #
+      # @return [(Tree::Node, Haml::Util::SubsetMap)] The resulting tree of static nodes
+      #   *and* the extensions defined for this tree
+      def cssize(extends = Haml::Util::SubsetMap.new, parent = nil)
+        return super(extends), extends
       rescue Sass::SyntaxError => e
         e.sass_template = @template
         raise e
