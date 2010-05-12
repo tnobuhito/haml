@@ -3,9 +3,19 @@
 * Table of contents
 {:toc}
 
-## 3.0.2 (Unreleased)
+## 3.0.2
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.2).
+
+### Merb 1.1.0 Support
+
+Fixed a bug inserting the Sass plugin into the Merb 1.1.0 Rack application.
+
+### Bug Fixes
 
 * Allow identifiers to begin with multiple underscores.
+
+* Don't raise an error when using `haml --rails` with older Rails versions.
 
 ## 3.0.1
 
