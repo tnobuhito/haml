@@ -3,9 +3,21 @@
 * Table of contents
 {:toc}
 
+## 3.0.14
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.14).
+
+* Properly parse paths with drive letters on Windows (e.g. `C:\Foo\Bar.sass`)
+  in the Sass executable.
+
+* Compile Sass files in a deterministic order.
+
+* Fix a bug where comments after `@if` statements in SCSS
+  weren't getting passed through to the output document.
+
 ## 3.0.13
 
-[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.12).
+[Tagged on GitHub](http://github.com/nex3/haml/commit/3.0.13).
 
 ## CSS `@import` Directives
 
