@@ -3,12 +3,20 @@
 * Table of contents
 {:toc}
 
+## 3.2.0 (Unreleased)
+
+* Get rid of the `--rails` flag for the `haml` executable.
+  This flag hasn't been necessary since Rails 2.0.
+  Existing Rails 2.0 installations will continue to work.
+
 ## 3.0.18 (Unreleased)
 
 * Don't require `rake` in the gemspec, for bundler compatibility under
   JRuby. Thanks to [Gordon McCreight](http://www.gmccreight.com/blog).
 
 * Get rid of the annoying RDoc errors on install.
+
+* Disambiguate references to the `Rails` module when `haml-rails` is installed.
 
 ## 3.0.17
 
