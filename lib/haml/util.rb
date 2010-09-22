@@ -6,7 +6,6 @@ require 'strscan'
 require 'rbconfig'
 
 require 'haml/root'
-require 'haml/util/subset_map'
 
 module Haml
   # A module containing various useful functions.
@@ -330,6 +329,35 @@ module Haml
       warn(msg)
     end
 
+    # Try loading Sass. If the `sass` gem isn't installed,
+    # print a warning and load from the vendored gem.
+    #
+    # @return [Boolean] True if Sass was successfully loaded from the `sass` gem,
+    #   false otherwise.
+    def try_sass
+      return true if defined?(::SASS_BEGUN_TO_LOAD)
+      begin
+        require 'sass/version'
+        loaded = Sass.respond_to?(:version) && Sass.version[:major] &&
+          Sass.version[:minor] && ((Sass.version[:major] > 3 && Sass.version[:minor] > 1) ||
+          ((Sass.version[:major] == 3 && Sass.version[:minor] == 1) &&
+            (Sass.version[:prerelease] || Sass.version[:name] != "Bleeding Edge")))
+      rescue LoadError => e
+        loaded = false
+      end
+
+      unless loaded
+        haml_warn(<<WARNING)
+Sass is in the process of being separated from Haml,
+and will no longer be bundled at all in Haml 3.2.0.
+Please install the 'sass' gem if you want to use Sass.
+WARNING
+        $".delete('sass/version')
+        $LOAD_PATH.unshift(scope("vendor/sass/lib"))
+      end
+      loaded
+    end
+
     ## Cross Rails Version Compatibility
 
     # Returns the root of the Rails application,
@@ -502,7 +530,7 @@ MSG
     # Like {\#check\_encoding}, but also checks for a Ruby-style `-# coding:` comment
     # at the beginning of the template and uses that encoding if it exists.
     #
-    # The Sass encoding rules are simple.
+    # The Haml encoding rules are simple.
     # If a `-# coding:` comment exists,
     # we assume that that's the original encoding of the document.
     # Otherwise, we use whatever encoding Ruby has.
@@ -529,51 +557,6 @@ MSG
       end
 
       return check_encoding(str, &block)
-    end
-
-    # Like {\#check\_encoding}, but also checks for a `@charset` declaration
-    # at the beginning of the file and uses that encoding if it exists.
-    #
-    # The Sass encoding rules are simple.
-    # If a `@charset` declaration exists,
-    # we assume that that's the original encoding of the document.
-    # Otherwise, we use whatever encoding Ruby has.
-    # Then we convert that to UTF-8 to process internally.
-    # The UTF-8 end result is what's returned by this method.
-    #
-    # @param str [String] The string of which to check the encoding
-    # @yield [msg] A block in which an encoding error can be raised.
-    #   Only yields if there is an encoding error
-    # @yieldparam msg [String] The error message to be raised
-    # @return [(String, Encoding)] The original string encoded as UTF-8,
-    #   and the source encoding of the string (or `nil` under Ruby 1.8)
-    # @raise [Encoding::UndefinedConversionError] if the source encoding
-    #   cannot be converted to UTF-8
-    # @raise [ArgumentError] if the document uses an unknown encoding with `@charset`
-    def check_sass_encoding(str, &block)
-      return check_encoding(str, &block), nil if ruby1_8?
-      # We allow any printable ASCII characters but double quotes in the charset decl
-      bin = str.dup.force_encoding("BINARY")
-      encoding = Haml::Util::ENCODINGS_TO_CHECK.find do |enc|
-        bin =~ Haml::Util::CHARSET_REGEXPS[enc]
-      end
-      charset, bom = $1, $2
-      if charset
-        charset = charset.force_encoding(encoding).encode("UTF-8")
-        if endianness = encoding[/[BL]E$/]
-          begin
-            Encoding.find(charset + endianness)
-            charset << endianness
-          rescue ArgumentError # Encoding charset + endianness doesn't exist
-          end
-        end
-        str.force_encoding(charset)
-      elsif bom
-        str.force_encoding(encoding)
-      end
-
-      str = check_encoding(str, &block)
-      return str.encode("UTF-8"), str.encoding
     end
 
     unless ruby1_8?

@@ -2,7 +2,7 @@ require 'optparse'
 require 'fileutils'
 
 module Haml
-  # This module handles the various Haml executables (`haml`, `sass`, `sass-convert`, etc).
+  # This module handles the various Haml executables (`haml` and `haml-convert`).
   module Exec
     # An abstract class that encapsulates the executable code for all three executables.
     class Generic
@@ -89,7 +89,7 @@ module Haml
         end
 
         opts.on_tail("-v", "--version", "Print version") do
-          puts("Haml/Sass #{::Haml.version[:string]}")
+          puts("Haml #{::Haml.version[:string]}")
           exit
         end
       end
@@ -163,234 +163,6 @@ Required dependency #{dep} not found!
   Use --trace for backtrace.
 MESSAGE
         exit 1
-      end
-    end
-
-    # The `sass` executable.
-    class Sass < Generic
-      # @param args [Array<String>] The command-line arguments
-      def initialize(args)
-        super
-        @options[:for_engine] = {
-          :load_paths => ['.'] + (ENV['SASSPATH'] || '').split(File::PATH_SEPARATOR)
-        }
-      end
-
-      protected
-
-      # Tells optparse how to parse the arguments.
-      #
-      # @param opts [OptionParser]
-      def set_opts(opts)
-        super
-
-        opts.banner = <<END
-Usage: sass [options] [INPUT] [OUTPUT]
-
-Description:
-  Converts SCSS or Sass files to CSS.
-
-Options:
-END
-
-        opts.on('--scss',
-                'Use the CSS-superset SCSS syntax.') do
-          @options[:for_engine][:syntax] = :scss
-        end
-        opts.on('--watch', 'Watch files or directories for changes.',
-                           'The location of the generated CSS can be set using a colon:',
-                           '  sass --watch input.sass:output.css',
-                           '  sass --watch input-dir:output-dir') do
-          @options[:watch] = true
-        end
-        opts.on('--update', 'Compile files or directories to CSS.',
-                            'Locations are set like --watch.') do
-          @options[:update] = true
-        end
-        opts.on('--stop-on-error', 'If a file fails to compile, exit immediately.',
-                                   'Only meaningful for --watch and --update.') do
-          @options[:stop_on_error] = true
-        end
-        opts.on('-c', '--check', "Just check syntax, don't evaluate.") do
-          require 'stringio'
-          @options[:check_syntax] = true
-          @options[:output] = StringIO.new
-        end
-        opts.on('-t', '--style NAME',
-                'Output style. Can be nested (default), compact, compressed, or expanded.') do |name|
-          @options[:for_engine][:style] = name.to_sym
-        end
-        opts.on('-q', '--quiet', 'Silence warnings during compilation.') do
-          @options[:for_engine][:quiet] = true
-        end
-        opts.on('-g', '--debug-info',
-                'Emit extra information in the generated CSS that can be used by the FireSass Firebug plugin.') do
-          @options[:for_engine][:debug_info] = true
-        end
-        opts.on('-l', '--line-numbers', '--line-comments',
-                'Emit comments in the generated CSS indicating the corresponding sass line.') do
-          @options[:for_engine][:line_numbers] = true
-        end
-        opts.on('-i', '--interactive',
-                'Run an interactive SassScript shell.') do
-          @options[:interactive] = true
-        end
-        opts.on('-I', '--load-path PATH', 'Add a sass import path.') do |path|
-          @options[:for_engine][:load_paths] << path
-        end
-        opts.on('-r', '--require LIB', 'Require a Ruby library before running Sass.') do |lib|
-          require lib
-        end
-        opts.on('--cache-location PATH', 'The path to put cached Sass files. Defaults to .sass-cache.') do |loc|
-          @options[:for_engine][:cache_location] = loc
-        end
-        opts.on('-C', '--no-cache', "Don't cache to sassc files.") do
-          @options[:for_engine][:cache] = false
-        end
-
-        unless ::Haml::Util.ruby1_8?
-          opts.on('-E encoding', 'Specify the default encoding for Sass files.') do |encoding|
-            Encoding.default_external = encoding
-          end
-        end
-      end
-
-      # Processes the options set by the command-line arguments,
-      # and runs the Sass compiler appropriately.
-      def process_result
-        require 'sass'
-
-        if !@options[:update] && !@options[:watch] &&
-            @args.first && colon_path?(@args.first)
-          if @args.size == 1
-            @args = split_colon_path(@args.first)
-          else
-            @options[:update] = true
-          end
-        end
-
-        return interactive if @options[:interactive]
-        return watch_or_update if @options[:watch] || @options[:update]
-        super
-        @options[:for_engine][:filename] = @options[:filename]
-
-        begin
-          input = @options[:input]
-          output = @options[:output]
-
-          @options[:for_engine][:syntax] ||= :scss if input.is_a?(File) && input.path =~ /\.scss$/
-          engine =
-            if input.is_a?(File) && !@options[:check_syntax]
-              ::Sass::Engine.for_file(input.path, @options[:for_engine])
-            else
-              # We don't need to do any special handling of @options[:check_syntax] here,
-              # because the Sass syntax checking happens alongside evaluation
-              # and evaluation doesn't actually evaluate any code anyway.
-              ::Sass::Engine.new(input.read(), @options[:for_engine])
-            end
-
-          input.close() if input.is_a?(File)
-
-          output.write(engine.render)
-          output.close() if output.is_a? File
-        rescue ::Sass::SyntaxError => e
-          raise e if @options[:trace]
-          raise e.sass_backtrace_str("standard input")
-        end
-      end
-
-      private
-
-      def interactive
-        require 'sass/repl'
-        ::Sass::Repl.new(@options).run
-      end
-
-      def watch_or_update
-        require 'sass/plugin'
-        ::Sass::Plugin.options.merge! @options[:for_engine]
-        ::Sass::Plugin.options[:unix_newlines] = @options[:unix_newlines]
-
-        raise <<MSG if @args.empty?
-What files should I watch? Did you mean something like:
-    sass --watch input.sass:output.css
-    sass --watch input-dir:output-dir
-MSG
-
-        if !colon_path?(@args[0]) && probably_dest_dir?(@args[1])
-          flag = @options[:update] ? "--update" : "--watch"
-          err =
-            if !File.exist?(@args[1])
-              "doesn't exist"
-            elsif @args[1] =~ /\.css$/
-              "is a CSS file"
-            end
-          raise <<MSG if err
-File #{@args[1]} #{err}.
-    Did you mean: sass #{flag} #{@args[0]}:#{@args[1]}
-MSG
-        end
-
-        dirs, files = @args.map {|name| split_colon_path(name)}.
-          partition {|i, _| File.directory? i}
-        files.map! {|from, to| [from, to || from.gsub(/\..*?$/, '.css')]}
-        dirs.map! {|from, to| [from, to || from]}
-        ::Sass::Plugin.options[:template_location] = dirs
-
-        ::Sass::Plugin.on_updating_stylesheet do |_, css|
-          if File.exists? css
-            puts_action :overwrite, :yellow, css
-          else
-            puts_action :create, :green, css
-          end
-        end
-
-        had_error = false
-        ::Sass::Plugin.on_creating_directory {|dirname| puts_action :directory, :green, dirname}
-        ::Sass::Plugin.on_deleting_css {|filename| puts_action :delete, :yellow, filename}
-        ::Sass::Plugin.on_compilation_error do |error, _, _|
-          raise error unless error.is_a?(::Sass::SyntaxError) && !@options[:stop_on_error]
-          had_error = true
-          puts_action :error, :red, "#{error.sass_filename} (Line #{error.sass_line}: #{error.message})"
-        end
-
-        if @options[:update]
-          ::Sass::Plugin.update_stylesheets(files)
-          exit 1 if had_error
-          return
-        end
-
-        puts ">>> Sass is watching for changes. Press Ctrl-C to stop."
-
-        ::Sass::Plugin.on_template_modified {|template| puts ">>> Change detected to: #{template}"}
-        ::Sass::Plugin.on_template_created {|template| puts ">>> New template detected: #{template}"}
-        ::Sass::Plugin.on_template_deleted {|template| puts ">>> Deleted template detected: #{template}"}
-
-        ::Sass::Plugin.watch(files)
-      end
-
-      def colon_path?(path)
-        !split_colon_path(path)[1].nil?
-      end
-
-      def split_colon_path(path)
-        one, two = path.split(':', 2)
-        if one && two && ::Haml::Util.windows? &&
-            one =~ /\A[A-Za-z]\Z/ && two =~ /\A[\/\\]/
-          # If we're on Windows and we were passed a drive letter path,
-          # don't split on that colon.
-          one2, two = two.split(':', 2)
-          one = one + ':' + one2
-        end
-        return one, two
-      end
-
-      # Whether path is likely to be meant as the destination
-      # in a source:dest pair.
-      def probably_dest_dir?(path)
-        return false unless path
-        return false if colon_path?(path)
-        return Dir.glob(File.join(path, "*.s[ca]ss")).empty?
       end
     end
 
@@ -572,6 +344,8 @@ END
         handle_load_error(err)
       end
     end
+<<<<<<< HEAD
+=======
 
     # The `sass-convert` executable.
     class SassConvert < Generic
@@ -795,5 +569,6 @@ END
 NOTE
       end
     end
+>>>>>>> master
   end
 end
