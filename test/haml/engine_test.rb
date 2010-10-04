@@ -86,6 +86,7 @@ MESSAGE
     "foo\n:plain\n  1\n  2\n  3\#{''}\n4\n- raise 'foo'" => ["foo", 7],
     "foo\n:plain\n  1\n  2\n  \#{raise 'foo'}" => ["foo", 5],
     "= raise 'foo'\nfoo\nbar\nbaz\nbang" => ["foo", 1],
+    "- case 1\n\n- when 1\n  - raise 'foo'" => ["foo", 4],
   }
 
   User = Struct.new('User', :id)
@@ -641,6 +642,32 @@ HTML
 HAML
   end
 
+  def test_html5_javascript_filter
+    assert_equal(<<HTML, render(<<HAML, :format => :html5))
+<script>
+  //<![CDATA[
+    foo bar
+  //]]>
+</script>
+HTML
+:javascript
+  foo bar
+HAML
+  end
+
+  def test_html5_css_filter
+    assert_equal(<<HTML, render(<<HAML, :format => :html5))
+<style>
+  /*<![CDATA[*/
+    foo bar
+  /*]]>*/
+</style>
+HTML
+:css
+  foo bar
+HAML
+  end
+
   def test_erb_filter_with_multiline_expr
     assert_equal(<<HTML, render(<<HAML))
 foobarbaz
@@ -771,6 +798,30 @@ HTML
 - else
   - "foo"
 = var
+HAML
+  end
+
+  def test_case_with_newline_after_case
+    assert_equal(<<HTML, render(<<HAML))
+foo
+HTML
+- case 1
+
+  - when 1
+    foo
+  - when 2
+    bar
+HAML
+
+    assert_equal(<<HTML, render(<<HAML))
+bar
+HTML
+- case 2
+
+- when 1
+  foo
+- when 2
+  bar
 HAML
   end
 
