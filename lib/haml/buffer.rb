@@ -187,38 +187,14 @@ module Haml
       <% end %>
 RUBY
 
-    # Takes the various information about the opening tag for an element,
-    # formats it, and appends it to the buffer.
-    def open_tag(name, self_closing, try_one_line, preserve_tag, escape_html, class_id,
-                 nuke_outer_whitespace, nuke_inner_whitespace, obj_ref, content, *attributes_hashes)
-      tabulation = @real_tabs
-
+    def attributes(class_id, obj_ref, *attributes_hashes)
       attributes = class_id
       attributes_hashes.each do |old|
         self.class.merge_attrs(attributes, to_hash(old.map {|k, v| [k.to_s, v]}))
       end
       self.class.merge_attrs(attributes, parse_object_ref(obj_ref)) if obj_ref
-
-      if self_closing && xhtml?
-        str = " />" + (nuke_outer_whitespace ? "" : "\n")
-      else
-        str = ">" + ((if self_closing && html?
-                        nuke_outer_whitespace
-                      else
-                        try_one_line || preserve_tag || nuke_inner_whitespace
-                      end) ? "" : "\n")
-      end
-
-      attributes = Compiler.build_attributes(
+      Compiler.build_attributes(
         html?, @options[:attr_wrapper], @options[:escape_attrs], attributes)
-      @buffer << "#{nuke_outer_whitespace || @options[:ugly] ? '' : tabs(tabulation)}<#{name}#{attributes}#{str}"
-
-      if content
-        @buffer << "#{content}</#{name}>" << (nuke_outer_whitespace ? "" : "\n")
-        return
-      end
-
-      @real_tabs += 1 unless self_closing || nuke_inner_whitespace
     end
 
     # Remove the whitespace from the right side of the buffer string.

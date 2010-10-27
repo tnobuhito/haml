@@ -1,3 +1,5 @@
+require 'cgi'
+
 module Haml
   module Compiler
     include Haml::Util
@@ -130,7 +132,6 @@ END
         @dont_indent_next_line = dont_indent_next_line
         return if tag_closed
       else
-        content = parse ? 'nil' : inspect_obj(value)
         if attributes_hashes.empty?
           attributes_hashes = ''
         elsif attributes_hashes.size == 1
@@ -139,11 +140,27 @@ END
           attributes_hashes = ", (#{attributes_hashes.join(").merge(")})"
         end
 
-        args = [t[:name], t[:self_closing], !block_given?, t[:preserve_tag],
-          t[:escape_html], t[:attributes], t[:nuke_outer_whitespace],
-          t[:nuke_inner_whitespace]].map {|v| inspect_obj(v)}.join(', ')
-        push_silent "_hamlout.open_tag(#{args}, #{object_ref}, #{content}#{attributes_hashes})"
-        @dont_tab_up_next_text = @dont_indent_next_line = dont_indent_next_line
+        push_merged_text "<#{t[:name]}", 0, !t[:nuke_outer_whitespace]
+        push_generated_script(
+          "_hamlout.attributes(#{inspect_obj(t[:attributes])}, #{object_ref}#{attributes_hashes})")
+        concat_merged_text(
+          if t[:self_closing] && xhtml?
+            " />" + (t[:nuke_outer_whitespace] ? "" : "\n")
+          else
+            ">" + ((if t[:self_closing] && html?
+                      t[:nuke_outer_whitespace]
+                    else
+                      !block_given? || t[:preserve_tag] || t[:nuke_inner_whitespace]
+                    end) ? "" : "\n")
+          end)
+
+        if value && !parse
+          concat_merged_text("#{value}</#{t[:name]}>#{t[:nuke_outer_whitespace] ? "" : "\n"}")
+        else
+          @to_merge << [:text, '', 1] unless t[:nuke_inner_whitespace]
+        end
+
+        @dont_indent_next_line = dont_indent_next_line
       end
 
       return if t[:self_closing]
@@ -309,9 +326,7 @@ END
       push_merged_text '' unless opts[:in_tag]
 
       unless block_given?
-        script = no_format ? "#{text}\n" : "#{static_method}(#{output_expr});"
-        @to_merge << [:script, resolve_newlines + script]
-        @output_line += script.count("\n")
+        push_generated_script(no_format ? "#{text}\n" : "#{static_method}(#{output_expr});")
         concat_merged_text("\n") unless opts[:in_tag] || opts[:nuke_inner_whitespace]
         return
       end
@@ -322,6 +337,11 @@ END
       push_silent('end', :can_suppress) unless @node.value[:dont_push_end]
       @precompiled << "_hamlout.buffer << #{no_format ? "haml_temp.to_s;" : "#{static_method}(haml_temp);"}"
       concat_merged_text("\n") unless opts[:in_tag] || opts[:nuke_inner_whitespace] || @options[:ugly]
+    end
+
+    def push_generated_script(text)
+      @to_merge << [:script, resolve_newlines + text]
+      @output_line += text.count("\n")
     end
 
     # This is a class method so it can be accessed from Buffer.

@@ -291,6 +291,31 @@ HAML
     assert_equal(hash, {:color => 'red'})
   end
 
+  def test_ugly_semi_prerendered_tags
+    assert_equal(<<HTML, render(<<HAML, :ugly => true))
+<p a='2'></p>
+<p a='2'>foo</p>
+<p a='2' />
+<p a='2'>foo</p>
+<p a='2'>foo
+bar</p>
+<p a='2'>foo
+bar</p>
+<p a='2'>
+foo
+</p>
+HTML
+%p{:a => 1 + 1}
+%p{:a => 1 + 1} foo
+%p{:a => 1 + 1}/
+%p{:a => 1 + 1}= "foo"
+%p{:a => 1 + 1}= "foo\\nbar"
+%p{:a => 1 + 1}~ "foo\\nbar"
+%p{:a => 1 + 1}
+  foo
+HAML
+  end
+
   def test_end_of_file_multiline
     assert_equal("<p>0</p>\n<p>1</p>\n<p>2</p>\n", render("- for i in (0...3)\n  %p= |\n   i |"))
   end
@@ -1470,7 +1495,7 @@ HAML
 
   def test_new_attribute_ids
     assert_equal("<div id='foo_bar'></div>\n", render("#foo(id='bar')"))
-    assert_equal("<div id='foo_bar_baz'></div>\n", render("#foo{:id => 'bar'}(id='baz')"))
+    assert_equal("<div id='foo_baz_bar'></div>\n", render("#foo{:id => 'bar'}(id='baz')"))
     assert_equal("<div id='foo_baz_bar'></div>\n", render("#foo(id='baz'){:id => 'bar'}"))
     foo = User.new(42)
     assert_equal("<div class='struct_user' id='foo_baz_bar_struct_user_42'></div>\n",
@@ -1479,7 +1504,7 @@ HAML
       render("#foo(id='baz')[foo]{:id => 'bar'}", :locals => {:foo => foo}))
     assert_equal("<div class='struct_user' id='foo_baz_bar_struct_user_42'></div>\n",
       render("#foo[foo](id='baz'){:id => 'bar'}", :locals => {:foo => foo}))
-    assert_equal("<div class='struct_user' id='foo_bar_baz_struct_user_42'></div>\n",
+    assert_equal("<div class='struct_user' id='foo_baz_bar_struct_user_42'></div>\n",
       render("#foo[foo]{:id => 'bar'}(id='baz')", :locals => {:foo => foo}))
   end
 
@@ -1551,11 +1576,17 @@ HAML
     assert_equal("<a a='b' c='d'>bar</a>\n", render("%a(c='d'){:a => 'b'} bar"))
     assert_equal("<a a='b' c='d'>bar</a>\n", render("%a{:a => 'b'}(c='d') bar"))
 
-    assert_equal("<a a='d'>bar</a>\n", render("%a{:a => 'b'}(a='d') bar"))
+    # Old-style always takes precedence over new-style,
+    # because theoretically old-style could have arbitrary end-of-method-call syntax.
+    assert_equal("<a a='b'>bar</a>\n", render("%a{:a => 'b'}(a='d') bar"))
     assert_equal("<a a='b'>bar</a>\n", render("%a(a='d'){:a => 'b'} bar"))
 
     assert_equal("<a a='b' b='c' c='d' d='e'>bar</a>\n",
       render("%a{:a => 'b',\n:b => 'c'}(c='d'\nd='e') bar"))
+
+    locals = {:b => 'b', :d => 'd'}
+    assert_equal("<p a='b' c='d'></p>\n", render("%p{:a => b}(c=d)", :locals => locals))
+    assert_equal("<p a='b' c='d'></p>\n", render("%p(a=b){:c => d}", :locals => locals))
   end
 
   # Ruby Multiline
